@@ -18,8 +18,10 @@ class JobSchedulerImpl extends JobScheduler {
 	private Queue<JobSchedule> mCheckJobs = new ArrayDeque<>();
 	private Lock mJobScheduleLock = new ReentrantLock();
 	private Condition mJobScheduleCondition = mJobScheduleLock.newCondition();
+	private Thread mExecutorThread;
 
 	void checkJobSchedule() throws InterruptedException {
+		mExecutorThread = Thread.currentThread();
 		mCheckJobs.clear();
 		long thermal = 20L;
 		try {
@@ -86,4 +88,8 @@ class JobSchedulerImpl extends JobScheduler {
 		}
 	}
 
+	@Override
+	public Thread getExecutorThread() {
+		return mExecutorThread;
+	}
 }

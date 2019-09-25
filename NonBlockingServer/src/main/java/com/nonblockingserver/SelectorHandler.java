@@ -3,6 +3,7 @@ package com.nonblockingserver;
 import com.zhongyou.util.Logger;
 
 import java.io.IOException;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channel;
 import java.nio.channels.ClosedChannelException;
@@ -43,6 +44,14 @@ class SelectorHandler {
 				}
 			} catch (Exception e) {
 				Logger.printException(e);
+				Throwable cause = e.getCause();
+				if (cause != null && cause instanceof SocketException) {
+					String message = cause.getMessage();
+					if ("Network is unreachable".equals(message)
+							|| "Operation not permitted".equals(message)) {
+						return;//do not close socket here
+					}
+				}
 				try {
 					key.cancel();
 					key.channel().close();

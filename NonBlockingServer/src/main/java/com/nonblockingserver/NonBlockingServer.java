@@ -1,11 +1,13 @@
 package com.nonblockingserver;
 
+import com.nonblockingserver.util.InternetUtil;
 import com.zhongyou.jobschedule.JobSchedule;
 import com.zhongyou.jobschedule.JobScheduler;
 import com.zhongyou.util.Logger;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.channels.Selector;
 import java.util.HashSet;
 import java.util.Set;
@@ -225,6 +227,11 @@ public class NonBlockingServer {
 	}
 
 	public InetAddress getLocalAddress() {
+		try {
+			return InternetUtil.getLocalHostLANAddress();
+		} catch (UnknownHostException e) {
+			Logger.printException(e);
+		}
 		return mLocalAddress;
 	}
 

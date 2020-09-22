@@ -2,7 +2,7 @@ package com.nonblockingserver;
 
 import com.zhongyou.jobschedule.JobSchedule;
 import com.zhongyou.jobschedule.JobScheduler;
-import com.zhongyou.util.Logger;
+import com.zhongyou.util.ZyLogger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -66,7 +66,7 @@ class JobSchedulerImpl extends JobScheduler {
 			try {
 				job.run();
 			} catch (Exception e) {
-				Logger.printException(e);
+				ZyLogger.printException(e);
 			}
 		}
 	}

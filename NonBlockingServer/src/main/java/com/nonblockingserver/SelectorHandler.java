@@ -1,6 +1,7 @@
 package com.nonblockingserver;
 
-import com.zhongyou.util.Logger;
+import com.zhongyou.util.ZyLogger;
+import com.zhongyou.util.function.Consumer;
 
 import java.io.IOException;
 import java.net.SocketException;
@@ -23,6 +24,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 class SelectorHandler {
+	private static final String TAG = SelectorHandler.class.getSimpleName();
 	private Map<Channel, Consumer<SelectionKey>> mSelectionKeyProcessors = new HashMap<>();
 	private Lock mLock = new ReentrantLock();
 	private Condition mCondition = mLock.newCondition();
@@ -43,20 +45,24 @@ class SelectorHandler {
 					processor.accept(key);
 				}
 			} catch (Exception e) {
-				Logger.printException(e);
+				ZyLogger.printException(e);
 				Throwable cause = e.getCause();
-				if (cause != null && cause instanceof SocketException) {
+				if (cause instanceof SocketException) {
 					String message = cause.getMessage();
 					if ("Network is unreachable".equals(message)
 							|| "Operation not permitted".equals(message)) {
 						return;//do not close socket here
 					}
+					return;//全都放过
 				}
+
+				ZyLogger.e(TAG, "Channel closed due to exception");
+				ZyLogger.printException(TAG, e);
 				try {
 					key.cancel();
 					key.channel().close();
 				} catch (IOException cex) {
-					Logger.printException(e);
+					ZyLogger.printException(e);
 				}
 				if (e instanceof InterruptedException) {
 					Thread.interrupted();
@@ -100,7 +106,7 @@ class SelectorHandler {
 				handleSelectorIO();
 			}
 		} catch (Exception e) {
-			Logger.printException(e);
+			ZyLogger.printException(e);
 			if (e instanceof InterruptedException) {
 				Thread.interrupted();
 			}
@@ -111,7 +117,7 @@ class SelectorHandler {
 			try {
 				mSelectorProxy.close();
 			} catch (IOException e) {
-				Logger.printException(e);
+				ZyLogger.printException(e);
 			}
 			mSelectionKeyProcessors.clear();
 			mHostThread = null;
@@ -222,7 +228,7 @@ class SelectorHandler {
 					try {
 						mPipe.source().read(mIOBufferSource);
 					} catch (IOException e) {
-						Logger.printException(e);
+						ZyLogger.printException(e);
 					}
 					mIOBufferSource.flip();
 					if (!mIOBufferSource.hasRemaining()) {
@@ -250,7 +256,7 @@ class SelectorHandler {
 		private Pipe.SourceChannel open() throws IOException {
 			mPipe = Pipe.open();
 			mPipe.source().configureBlocking(false);
-			register(mPipe.source(), SelectionKey.OP_READ);
+			addInterestOps(mPipe.source(), SelectionKey.OP_READ);
 			return mPipe.source();
 		}
 
@@ -266,24 +272,20 @@ class SelectorHandler {
 			return mPipeHandler;
 		}
 
-		void register(SelectableChannel channel, int interestOpt) {
+		private void register(SelectableChannel channel, Runnable action) {
 			Thread thread = mHostThread;
 			if (thread != null && thread == Thread.currentThread()) {
-				try {
-					channel.register(mBackupSelector, interestOpt);
-				} catch (ClosedChannelException e) {
-					throw new RuntimeException(e);
-				}
+				action.run();
 				return;
 			}
 			long now = System.currentTimeMillis();
 			try {
 				mTasks.offer(() -> {
-					Logger.d(getClass().getSimpleName(), "register:" + (System.currentTimeMillis() - now));
+					ZyLogger.v(TAG, "register:" + (System.currentTimeMillis() - now));
 					try {
-						channel.register(mBackupSelector, interestOpt);
-					} catch (ClosedChannelException e) {
-						Logger.printException(e);
+						action.run();
+					} catch (RuntimeException e) {
+						ZyLogger.printException(e);
 					}
 
 				});
@@ -293,7 +295,7 @@ class SelectorHandler {
 				mPipe.sink().write(mIOBufferSink);
 				mIOBufferSink.clear();
 			} catch (IOException e) {
-				Logger.printException(e);
+				ZyLogger.printException(e);
 			}
 		}
 
@@ -316,11 +318,48 @@ class SelectorHandler {
 		}
 
 		void updateInterestOps(SelectableChannel channel, int opt) {
-			int interestOps = interestOps(channel);
-			if (interestOps == opt) {
-				return;
-			}
-			register(channel, opt);
+			Runnable action = () -> {
+				int optionsNow = interestOps(channel);
+				if (opt == optionsNow) {
+					return;
+				}
+				try {
+					channel.register(mBackupSelector, opt);
+				} catch (ClosedChannelException e) {
+					throw new RuntimeException(e);
+				}
+			};
+			register(channel, action);
+		}
+
+		void addInterestOps(SelectableChannel channel, int opt) {
+			Runnable action = () -> {
+				int optionsNow = interestOps(channel);
+				if ((optionsNow & opt) == opt) {
+					return;
+				}
+				try {
+					channel.register(mBackupSelector, optionsNow | opt);
+				} catch (ClosedChannelException e) {
+					throw new RuntimeException(e);
+				}
+			};
+			register(channel, action);
+		}
+
+		void removeInterestOps(SelectableChannel channel, int opt) {
+			Runnable action = () -> {
+				int optionsNow = interestOps(channel);
+				if ((optionsNow & opt) == 0) {
+					return;
+				}
+				try {
+					channel.register(mBackupSelector, optionsNow & (~opt));
+				} catch (ClosedChannelException e) {
+					throw new RuntimeException(e);
+				}
+			};
+			register(channel, action);
 		}
 
 	}

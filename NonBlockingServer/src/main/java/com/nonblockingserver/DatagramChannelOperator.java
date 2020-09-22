@@ -1,6 +1,7 @@
 package com.nonblockingserver;
 
-import com.zhongyou.util.Logger;
+import com.zhongyou.util.ZyLogger;
+import com.zhongyou.util.function.Consumer;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -66,7 +67,7 @@ public abstract class DatagramChannelOperator {
 						while ((datagramPacket = mDatagramPacketToSend.poll()) != null) {
 							send(datagramPacket);
 						}
-						mSelectorHandler.getSelectorProxy().updateInterestOps(mChannel, mSelectorHandler.getSelectorProxy().interestOps(mChannel) & (~SelectionKey.OP_WRITE));
+						mSelectorHandler.getSelectorProxy().removeInterestOps(mChannel, SelectionKey.OP_WRITE);
 					} finally {
 						if (signal) {
 							mConditionWaitForPendingDatagramToBeSent.signalAll();
@@ -111,7 +112,7 @@ public abstract class DatagramChannelOperator {
 			mChannel.configureBlocking(false);
 			mChannel.socket().bind(new InetSocketAddress(listenPort));
 			mSelectorHandler = selectorHandler;
-			mSelectorHandler.getSelectorProxy().updateInterestOps(mChannel, SelectionKey.OP_READ);
+			mSelectorHandler.getSelectorProxy().addInterestOps(mChannel, SelectionKey.OP_READ);
 			mSelectorHandler.registerSelectionKeyProcessor(getChannel(), getSelectionKeyProcessor());
 			mIsOpened = true;
 			return mChannel;
@@ -139,7 +140,7 @@ public abstract class DatagramChannelOperator {
 				try {
 					mChannel.close();
 				} catch (Exception e) {
-					Logger.printException(e);
+					ZyLogger.printException(e);
 				}
 				mChannel = null;
 			}
@@ -161,7 +162,7 @@ public abstract class DatagramChannelOperator {
 				try {
 					mConditionWaitForPendingDatagramToBeSent.await(timeout, TimeUnit.MILLISECONDS);
 				} catch (InterruptedException e) {
-					Logger.printException(e);
+					ZyLogger.printException(e);
 					Thread.interrupted();
 				}
 			}
@@ -241,10 +242,7 @@ public abstract class DatagramChannelOperator {
 			throw new RuntimeException("Send datagram while closed");
 		}
 		mDatagramPacketToSend.offer(datagramPacket);
-		int interestOptNow = mSelectorHandler.getSelectorProxy().interestOps(mChannel);
-		if ((interestOptNow & SelectionKey.OP_WRITE) != SelectionKey.OP_WRITE) {
-			mSelectorHandler.getSelectorProxy().updateInterestOps(mChannel, interestOptNow | SelectionKey.OP_WRITE);
-		}
+		mSelectorHandler.getSelectorProxy().addInterestOps(mChannel, SelectionKey.OP_WRITE);
 
 	}
 

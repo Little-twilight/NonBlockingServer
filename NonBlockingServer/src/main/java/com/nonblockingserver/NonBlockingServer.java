@@ -1,13 +1,12 @@
 package com.nonblockingserver;
 
-import com.nonblockingserver.util.InternetUtil;
 import com.zhongyou.jobschedule.JobSchedule;
 import com.zhongyou.jobschedule.JobScheduler;
-import com.zhongyou.util.Logger;
+import com.zhongyou.util.ZyLogger;
+import com.zhongyou.util.utils.Request;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.nio.channels.Selector;
 import java.util.HashSet;
 import java.util.Set;
@@ -17,7 +16,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class NonBlockingServer {
+public class NonBlockingServer implements Request.TaskScheduler {
 	private SelectorHandler mSelectorHandler;
 	private JobSchedulerImpl mServerJobScheduler;
 	private JobScheduler mUiJobScheduler;
@@ -39,12 +38,12 @@ public class NonBlockingServer {
 			throw new RuntimeException("Trying to start an running server");
 		}
 		mLocalAddress = localAddress;
-		Logger.d(TAG, "Server local address assigned:" + mLocalAddress.toString());
+		ZyLogger.i(TAG, "Server local address assigned:" + mLocalAddress.toString());
 		new Thread(() -> {
 			try {
 				innerServerExecution();
 			} catch (IOException | InterruptedException e) {
-				Logger.printException(e);
+				ZyLogger.printException(e);
 			}
 		}, "Server Loop Thread").start();
 	}
@@ -54,7 +53,7 @@ public class NonBlockingServer {
 			throw new RuntimeException("Trying to start an running server");
 		}
 		mLocalAddress = localAddress;
-		Logger.d(TAG, "Server local address assigned:" + mLocalAddress.toString());
+		ZyLogger.i(TAG, "Server local address assigned:" + mLocalAddress.toString());
 		innerServerExecution();
 	}
 
@@ -71,7 +70,7 @@ public class NonBlockingServer {
 					try {
 						plugin.onStart();
 					} catch (Exception e) {
-						Logger.printException(e);
+						ZyLogger.printException(e);
 					}
 				}
 			}
@@ -81,7 +80,7 @@ public class NonBlockingServer {
 			mCondition.signalAll();
 			mLock.unlock();
 
-			Logger.d(TAG, "Server started");
+			ZyLogger.i(TAG, "Server started");
 
 			while (mServerOpened.get()) {
 				try {
@@ -97,7 +96,7 @@ public class NonBlockingServer {
 					try {
 						plugin.onStop();
 					} catch (Exception e) {
-						Logger.printException(e);
+						ZyLogger.printException(e);
 					}
 				}
 			}
@@ -227,12 +226,14 @@ public class NonBlockingServer {
 	}
 
 	public InetAddress getLocalAddress() {
-		try {
-			return InternetUtil.getLocalHostLANAddress();
-		} catch (UnknownHostException e) {
-			Logger.printException(e);
-		}
 		return mLocalAddress;
+	}
+
+	public void updateLocalAddress(InetAddress address) {
+		mLocalAddress = address;
+		for (Plugin plugin : mPlugins) {
+			plugin.onLocalAddressUpdated(address);
+		}
 	}
 
 	public void setUiJobScheduler(JobScheduler jobScheduler) {
@@ -247,5 +248,28 @@ public class NonBlockingServer {
 		return mPortAllocator;
 	}
 
+	@Override
+	public Request.Task scheduleTask(Runnable action, long time) {
+		JobSchedule jobSchedule = new JobSchedule(
+				action,
+				time
+		);
+		Request.Task task = new Request.Task() {
+			private JobSchedule mJobSchedule = jobSchedule;
+			private boolean mIsRemoved;
+
+			@Override
+			public boolean cancel() {
+				if (mIsRemoved) {
+					return false;
+				}
+				jobSchedule.cancel();
+				mIsRemoved = true;
+				return true;
+			}
+		};
+		getJobScheduler().requestJobSchedule(jobSchedule);
+		return task;
+	}
 }
 

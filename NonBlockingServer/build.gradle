@@ -3,8 +3,8 @@ apply plugin: 'java-library'
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     testImplementation 'junit:junit:4.12'
-    api 'com.github.Little-twilight:Prococol:master-SNAPSHOT'
-    api 'com.github.Little-twilight:JobSchedule:master-SNAPSHOT'
+    api 'com.github.Little-twilight:Protocol:V0.1'
+    api 'com.github.Little-twilight:JobSchedule:V0.1'
 }
 
 sourceCompatibility = "8"

@@ -1,13 +1,13 @@
-package com.nonblockingserver;
+package com.macfred.server;
 
 import com.github.naturs.logger.adapter.DefaultLogAdapter;
 import com.github.naturs.logger.strategy.format.PrettyFormatStrategy;
-import com.nonblockingserver.util.InternetUtil;
-import com.zhongyou.jobschedule.JobSchedule;
-import com.zhongyou.protocol.parser.AbsParserBuffer;
-import com.zhongyou.util.ZyLogger;
-import com.zhongyou.util.function.Consumer;
-import com.zhongyou.util.utils.ListenerManager;
+import com.macfred.jobschedule.JobSchedule;
+import com.macfred.protocol.parser.AbsParserBuffer;
+import com.macfred.server.util.InternetUtil;
+import com.macfred.util.Logger;
+import com.macfred.util.function.Consumer;
+import com.macfred.util.utils.ListenerManager;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -42,7 +42,7 @@ public class SocketChannelOperator {
     private InetSocketAddress mDstAddress;
 
     public static void main(String... args) throws IOException, InterruptedException {
-        ZyLogger.addLogAdapter(new DefaultLogAdapter(PrettyFormatStrategy.newBuilder().build()));
+        Logger.addLogAdapter(new DefaultLogAdapter(PrettyFormatStrategy.newBuilder().build()));
         NonBlockingServer server = new NonBlockingServer();
         server.asyncServer(InternetUtil.getLocalHostLANAddress());
         server.waitForStart();
@@ -61,11 +61,11 @@ public class SocketChannelOperator {
                 while ((read = readCachedBulkData(buffer, 0)) > 0) {
                     try {
                         String toString = new String(buffer, 0, read);
-                        ZyLogger.d(toString);
+                        Logger.d(toString);
                         byte[] data = ("Send:" + toString).getBytes();
                         sendBulkData(data, 0, data.length);
                     } catch (Exception e) {
-                        ZyLogger.printException(TAG, e);
+                        Logger.printException(TAG, e);
                     }
                 }
             }
@@ -128,13 +128,13 @@ public class SocketChannelOperator {
                             mSelectorHandler.getSelectorProxy().addInterestOps(mChannel, SelectionKey.OP_READ);
                             update(Status.Established);
                         } catch (ConnectException e) {
-                            ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("Connection exception when handle pending tcp: %s ", e.getMessage())), e));
+                            Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("Connection exception when handle pending tcp: %s ", e.getMessage())), e));
                             update(Status.ConnectionRefused);
                             //broken socket, just close
-                            ZyLogger.i(TAG, uniformLogFormat("About to close pending tcp due to exception"));
+                            Logger.i(TAG, uniformLogFormat("About to close pending tcp due to exception"));
                             close();
                         } catch (IOException e) {
-                            ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when handle pending tcp: %s ", e.getMessage())), e));
+                            Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when handle pending tcp: %s ", e.getMessage())), e));
                             update(Status.ConnectionPending);
                         }
                     } else {
@@ -151,14 +151,14 @@ public class SocketChannelOperator {
                             }
                             while (read > 0);
                         } catch (EOFException e) {
-                            ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("EOF occurred when read from tcp: %s ", e.getMessage())), e));
+                            Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("EOF occurred when read from tcp: %s ", e.getMessage())), e));
                             update(Status.PrepareDisconnection);
                             innerCloseOperations();
-                            ZyLogger.i(TAG, uniformLogFormat("Tcp socket closed due EOF when read from tcp"));
+                            Logger.i(TAG, uniformLogFormat("Tcp socket closed due EOF when read from tcp"));
                             update(Status.Disconnected);
                             break;
                         } catch (IOException e) {
-                            ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when read from tcp: %s ", e.getMessage())), e));
+                            Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when read from tcp: %s ", e.getMessage())), e));
                         }
                     }
                     if (key.isWritable()) {
@@ -170,7 +170,7 @@ public class SocketChannelOperator {
                             }
                             mSelectorHandler.getSelectorProxy().removeInterestOps(mChannel, SelectionKey.OP_WRITE);
                         } catch (IOException e) {
-                            ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when write to tcp: %s ", e.getMessage())), e));
+                            Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when write to tcp: %s ", e.getMessage())), e));
                         }
                     }
                     update(Status.Established);
@@ -209,7 +209,7 @@ public class SocketChannelOperator {
                 case Disconnected:
                     break;
                 default:
-                    ZyLogger.w(TAG, String.format("Open %s on illegal status %s", SocketChannelOperator.class.getSimpleName(), status));
+                    Logger.w(TAG, String.format("Open %s on illegal status %s", SocketChannelOperator.class.getSimpleName(), status));
                     return false;
             }
             update(Status.PrepareConnection);
@@ -220,7 +220,7 @@ public class SocketChannelOperator {
                 socketChannel.configureBlocking(false);
                 socketChannel.connect(dstAddress);
             } catch (Exception e) {
-                ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("Exception occurred when open tcp socket: %s ", e.getMessage())), e));
+                Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("Exception occurred when open tcp socket: %s ", e.getMessage())), e));
                 update(status);
                 if (socketChannel != null && socketChannel.isOpen()) {
                     try {
@@ -235,7 +235,7 @@ public class SocketChannelOperator {
                 selectorHandler.registerSelectionKeyProcessor(socketChannel, getSelectionKeyProcessor());
                 selectorHandler.getSelectorProxy().addInterestOps(socketChannel, SelectionKey.OP_CONNECT);
             } catch (Exception e) {
-                ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when register tcp selector: %s ", e.getMessage())), e));
+                Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("IO exception occurred when register tcp selector: %s ", e.getMessage())), e));
                 update(status);
                 selectorHandler.unregisterSelectionKeyProcessor(socketChannel);
                 try {
@@ -271,7 +271,7 @@ public class SocketChannelOperator {
             }
             update(Status.PrepareDisconnection);
             innerCloseOperations();
-            ZyLogger.i(uniformLogFormat("TCP Socket closed"));
+            Logger.i(uniformLogFormat("TCP Socket closed"));
             update(Status.Disconnected);
             return true;
         } finally {
@@ -368,7 +368,7 @@ public class SocketChannelOperator {
                 try {
                     socketChannel.close();
                 } catch (Exception e) {
-                    ZyLogger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("Exception occurred when close tcp: %s ", e.getMessage())), e));
+                    Logger.printException(TAG, new RuntimeException(uniformLogFormat(String.format("Exception occurred when close tcp: %s ", e.getMessage())), e));
                 }
             }
         }

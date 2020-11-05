@@ -1,6 +1,6 @@
-package com.nonblockingserver;
+package com.macfred.server;
 
-import com.nonblockingserver.util.InternetUtil;
+import com.macfred.server.util.InternetUtil;
 
 public class PortAllocator {
 	private int mRangeStart;

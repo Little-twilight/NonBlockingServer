@@ -1,4 +1,4 @@
-package com.nonblockingserver;
+package com.macfred.server;
 
 import java.net.InetAddress;
 
